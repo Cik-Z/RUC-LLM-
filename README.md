@@ -34,6 +34,7 @@
 ├── rag_qa.py               # RAG 问答模块
 ├── bm_search.py            # BM25 检索模块
 └── dense_search.py         # 向量检索模块
+```
 
 ## 🚀 快速开始
 
@@ -42,29 +43,35 @@
 ```text
 conda create -n campus-search python=3.9
 conda activate campus-search
+```
 
 安装项目依赖
 ```text
 pip install fastapi uvicorn requests beautifulsoup4 tqdm numpy faiss-cpu sentence-transformers pyserini openai
+```
 
 #### 2. 配置 API Key
 本项目使用 DeepSeek 大模型。请确保您拥有 API Key。
 **Mac/Linux**
 ```text
 export DEEPSEEK_API_KEY="sk-your-api-key-here"
+```
 
 **Windows**
 ```text
 $env:DEEPSEEK_API_KEY="sk-your-api-key-here"
+```
 
 #### 3. 数据处理与索引构建
 步骤 1：爬取数据 运行爬虫脚本，抓取校园网页并生成 corpus.jsonl：
 ```text
 python data.py
+```
 
 步骤 2：构建向量索引 (Dense Index) 将文本切片并编码为向量，存入 FAISS：
 ```text
 python build_dense_index.py
+```
 
 步骤 3：构建倒排索引 (BM25 Index) 使用 Pyserini 构建稀疏索引（确保 corpus.jsonl 已生成）：
 ```text
@@ -75,11 +82,13 @@ python -m pyserini.index.lucene \
   --generator DefaultLuceneDocumentGenerator \
   --threads 1 \
   --storePositions --storeDocvectors --storeRaw
+```
 
 #### 4. 启动服务
 运行 FastAPI 后端服务：
 ```text
 python main.py
+```
 
 服务启动后，打开浏览器访问：http://localhost:8000
 
