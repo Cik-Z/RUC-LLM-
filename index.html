@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能校园搜索</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 850px; margin: 40px auto; padding: 20px; text-align: center; background-color: #fcfcfc; }
+        h1 { color: #333; margin-bottom: 30px; letter-spacing: 1px; }
+        
+        /* 搜索框样式 */
+        .search-container { position: sticky; top: 20px; background: rgba(255,255,255,0.95); padding: 20px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-radius: 12px; backdrop-filter: blur(5px); }
+        .search-box { display: flex; gap: 10px; justify-content: center; margin-bottom: 15px; }
+        input[type="text"] { width: 500px; padding: 14px 20px; font-size: 16px; border: 2px solid #e0e0e0; border-radius: 30px; outline: none; transition: border-color 0.3s; }
+        input[type="text"]:focus { border-color: #4285f4; }
+        button { padding: 14px 30px; font-size: 16px; background-color: #4285f4; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(66, 133, 244, 0.2); transition: transform 0.1s; }
+        button:hover { background-color: #357ae8; transform: translateY(-1px); }
+        button:active { transform: translateY(1px); }
+
+        /* AI 回答框样式 */
+        #ai-answer-box { 
+            display: none; /* 默认隐藏 */
+            margin: 20px auto; 
+            padding: 20px; 
+            background: linear-gradient(135deg, #f0f7ff 0%, #e6f0ff 100%); 
+            border: 1px solid #d0e3fc; 
+            border-radius: 12px; 
+            text-align: left; 
+            position: relative;
+            box-shadow: 0 4px 12px rgba(66, 133, 244, 0.1);
+        }
+        .ai-title { font-weight: bold; color: #1a73e8; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+        .ai-content { color: #333; line-height: 1.6; font-size: 15px; white-space: pre-wrap; }
+        .loading-dot { display: inline-block; width: 6px; height: 6px; background-color: #1a73e8; border-radius: 50%; margin-left: 4px; animation: bounce 1.4s infinite ease-in-out both; }
+        .loading-dot:nth-child(1) { animation-delay: -0.32s; }
+        .loading-dot:nth-child(2) { animation-delay: -0.16s; }
+        
+        /* 搜索结果列表 */
+        #results { text-align: left; margin-top: 20px; padding: 0 10px;}
+        .result-item { margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; border: 1px solid #eee; transition: box-shadow 0.2s; }
+        .result-item:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .result-title { font-size: 18px; color: #1a0dab; text-decoration: none; display: block; margin-bottom: 6px; font-weight: 600;}
+        .result-title:hover { text-decoration: underline; }
+        .result-url { font-size: 13px; color: #006621; margin-bottom: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .result-preview { font-size: 14px; color: #4d5156; line-height: 1.5; }
+        .tag-score { font-size: 12px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; font-weight: normal; }
+
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+    </style>
+</head>
+<body>
+
+    <div class="search-container">
+        <h1>🎓 智能校园搜索</h1>
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="想知道什么？比如：人工智能学院在哪里..." onkeypress="handleEnter(event)">
+            <button onclick="handleSearch()">搜索</button>
+        </div>
+        <div>
+            <label style="cursor: pointer; font-size: 14px; color: #555;">
+                <input type="checkbox" id="useLLM" checked> ✨ 开启 DeepSeek 排序增强
+            </label>
+        </div>
+    </div>
+
+    <div id="ai-answer-box">
+        <div class="ai-title">
+            🤖 DeepSeek 智能回答 
+            <span id="ai-loading" style="display:none">
+                <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span>
+            </span>
+        </div>
+        <div id="ai-content" class="ai-content"></div>
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+        function handleEnter(e) {
+            if (e.key === 'Enter') handleSearch();
+        }
+
+        async function handleSearch() {
+            const query = document.getElementById('searchInput').value.trim();
+            const useLLM = document.getElementById('useLLM').checked;
+            if (!query) return alert("请输入关键词！");
+
+            // 1. 初始化界面
+            const resultsDiv = document.getElementById('results');
+            const aiBox = document.getElementById('ai-answer-box');
+            const aiContent = document.getElementById('ai-content');
+            const aiLoading = document.getElementById('ai-loading');
+
+            resultsDiv.innerHTML = '<p style="text-align:center; color:#666;">🔍 正在检索文档...</p>';
+            
+            // 显示 AI 框，状态设为思考中
+            aiBox.style.display = 'block';
+            aiContent.innerHTML = '<span style="color:#666; font-style:italic;">正在阅读文档并生成回答...</span>';
+            aiLoading.style.display = 'inline-block';
+
+            // 2. 启动两个并行请求：一个查文档(Search)，一个问AI(QA)
+            // 这样不用等文档查完了再问AI，速度更快
+            
+            const searchPromise = fetchSearch(query, useLLM, resultsDiv);
+            const qaPromise = fetchQA(query, aiContent, aiLoading);
+
+            // 等待两个都完成 (其实不需要await，它们各自会更新DOM)
+        }
+
+        // --- 逻辑 A: 获取搜索结果 ---
+        async function fetchSearch(query, useLLM, container) {
+            try {
+                const response = await fetch('http://localhost:8000/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query, top_k: 10, use_llm: useLLM })
+                });
+                const json = await response.json();
+
+                container.innerHTML = ''; // 清空加载提示
+
+                if (json.code !== 200 || !json.data || json.data.length === 0) {
+                    container.innerHTML = '<div style="text-align:center; color:#888;">未找到相关文档</div>';
+                    return;
+                }
+
+                json.data.forEach(item => {
+                    const highlightUrl = `${item.url}#:~:text=${encodeURIComponent(query)}`;
+                    const scoreTag = useLLM 
+                        ? `<span class="tag-score" style="background:#ffebee; color:#c62828;">AI Score: ${item.score.toFixed(2)}</span>`
+                        : `<span class="tag-score" style="background:#e3f2fd; color:#1565c0;">Hybrid: ${item.score.toFixed(4)}</span>`;
+
+                    const div = document.createElement('div');
+                    div.className = 'result-item';
+                    div.innerHTML = `
+                        <div class="result-url">${item.url}</div>
+                        <a href="${highlightUrl}" target="_blank" class="result-title">${item.title} ${scoreTag}</a>
+                        <div class="result-preview">${item.preview}</div>
+                    `;
+                    container.appendChild(div);
+                });
+
+            } catch (err) {
+                container.innerHTML = `<p style="color:red; text-align:center;">搜索请求失败: ${err.message}</p>`;
+            }
+        }
+
+        // --- 逻辑 B: 获取 AI 回答 ---
+        async function fetchQA(query, contentDiv, loadingIcon) {
+            try {
+                const response = await fetch('http://localhost:8000/ask', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query })
+                });
+                const json = await response.json();
+
+                loadingIcon.style.display = 'none'; // 停止转圈
+
+                if (json.code === 200) {
+                    // 打字机效果 (可选，直接显示也可以)
+                    typeWriter(contentDiv, json.answer);
+                } else {
+                    contentDiv.innerHTML = `<span style="color:red;">AI 生成失败: ${json.error}</span>`;
+                }
+            } catch (err) {
+                loadingIcon.style.display = 'none';
+                contentDiv.innerHTML = `<span style="color:red;">无法连接 AI 服务</span>`;
+            }
+        }
+
+        // 简单的打字机特效
+        function typeWriter(element, text) {
+            element.innerHTML = '';
+            let i = 0;
+            const speed = 20; // 打字速度
+            function type() {
+                if (i < text.length) {
+                    element.innerHTML += text.charAt(i);
+                    i++;
+                    setTimeout(type, speed);
+                }
+            }
+            type();
+        }
+    </script>
+</body>
+</html>
